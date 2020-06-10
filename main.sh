@@ -47,7 +47,7 @@ echo pvfs2-genconfig --quiet --protocol tcp --tcpport ${comm_port} --dist-name $
 #Server Setup
 for node in ${server_list}
 do
-  ssh $node /bin/bash << EOF
+  ssh ${node} /bin/bash << EOF
     echo "Setting up server at ${node}"
     rm -rf ${server_dir}*
     mkdir -p ${server_dir}
@@ -60,7 +60,7 @@ done
 #Client Setup
 for node in ${client_list}
 do
-  ssh $node /bin/bash << EOF
+  ssh ${node} /bin/bash << EOF
     echo "Starting client on ${node}"
     sudo kill-pvfs2-client
     mkdir -p ${client_dir} 
@@ -73,14 +73,34 @@ done
 #IOR
 identifier="S-${server_partition}-${server_number}-C-${client_partition}-${client_number}"
 factor=$((${num_ior_iter}-1))
+
 mkdir -p ${CWD}/logs/
 touch ${client_dir}/test
 
 echo -e "Running IOR"
 mpirun --hostfile ${CWD}/conf/hostfile -np $(( ${mpi_factor}*$num_clients )) ior -a MPIIO -b ${ior_size} -s ${ior_rep} -t ${ior_size} -e -E -k -w -i ${num_ior_iter} -o ${client_dir}/test > log-${identifier}.log
-rm ${client_dir}/test
 
 echo -n "${identifier}, " >> ${CWD}/results
 grep -E "write" log-${identifier}.log | tail -n ${num_ior_iter} | head -n ${factor} | awk -v f=${factor} ' { s+=$2;r=s/f }END{ print r }' >> ${CWD}/results
 
 mv log-${identifier}.log ${CWD}/logs/
+
+#Stop servers
+for node in ${server_list}
+do
+  ssh ${node} /bin/bash << EOF
+    echo "Killing server at ${node} "
+    rm -rf ${server_dir}/*
+    killall -s SIGKILL pvfs2-server
+  EOF
+done
+
+#Stop clients
+for node in ${client_list}
+do
+  ssh ${node} /bin/bash << EOF
+    echo "Stopping client on $node"
+    rm -rf ${client_dir}/*
+    sudo /usr/sbin/kill-pvfs2-client
+  EOF
+done

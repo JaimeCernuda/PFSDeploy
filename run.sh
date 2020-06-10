@@ -1,6 +1,9 @@
 #!/bin/bash
 
-./setup\
-  stor 2 /mnt/ssd/jcernudagarcia/orangefs\
-  comp 2 /mnt/nvme/jcernudagarcia/write/pfs/\
+for i in {1..24}
+do
+  stor ${i} /mnt/ssd/jcernudagarcia/orangefs\
+  comp ${i} /mnt/nvme/jcernudagarcia/write/ssd/\
   5 1 16M 4
+done
+
