@@ -4,20 +4,26 @@
 # ORANGEFS_KO
 # ORANGEFS_PATH
 #Usage
-# ./setupPfs\
+# ./setup\
 #   fd 
 #
 
 #Input Variables
 node_file="./all_nodes"
-partition="stor"
+server_partition="stor"
 num_servers=2
 server_dir=/mnt/ssd/jcernudagarcia/orangefs
+client_partition="comp"
+num_clients=2
+client_dir=/mnt/nvme/jcernudagarcia/write/pfs/
 
 #General Variables
 CWD=$(pwd)
-server_list=($(grep -E "*${partition}*" ${node_file} | head -n ${num_servers}))
+
+server_list=($(grep -E "*${server_partition}*" ${node_file} | head -n ${num_servers}))
 server_comma=$( IFS=$','; echo "${server_list[*]}" )
+
+client_list=($(grep -E "*${client_partition}*" ${node_file} | head -n ${num_clients}))
 
 # #Config PFS
 name="orangefs" #TODO: Allow renaming
@@ -28,55 +34,34 @@ data_dir=${server_dir}/data/
 meta_dir=${server_dir}/meta/
 log_dir=${server_dir}/log
 
-echo pvfs2-genconfig --quiet --protocol tcp --tcpport ${comm_port} --dist-name ${dist_name} --dist-params ${dist_params} --ioservers ${server_comma} --metaservers ${server_comma} --storage ${data_dir} --metadata ${meta_dir} --logfile ${log_dir} ${CWD}/pfs.conf
+mkdir -p ${CWD}/conf/
+echo pvfs2-genconfig --quiet --protocol tcp --tcpport ${comm_port} --dist-name ${dist_name} --dist-params ${dist_params} --ioservers ${server_comma} --metaservers ${server_comma} --storage ${data_dir} --metadata ${meta_dir} --logfile ${log_dir} ${CWD}/conf/pfs.conf
 
-# #Server Setup
-# #!/bin/bash
-# SCRIPT_DIR=`pwd`
-# NODES=$(cat ${SCRIPT_DIR}/conf/server_lists/clients)
-# PFS_SERVERS=($(cat ${SCRIPT_DIR}/conf/server_lists/pfs))
-# server=${PFS_SERVERS[0]}
-# for node in $NODES
-# do
-# if [[ $node == *"comp"* ]]; then
-#   mount_dir=/mnt/nvme/jcernudagarcia/write/pfs/
-# else
-#   mount_dir=/mnt/ssd/jcernudagarcia/write/pfs/
-# fi
-# echo "Starting pfs client on $node"
-# ssh $node /bin/bash << EOF
-# sudo kill-pvfs2-client
-# mkdir -p ${mount_dir} 
-# sudo insmod ${ORANGEFS_KO}/pvfs2.ko
-# sudo ${ORANGEFS_PATH}/sbin/pvfs2-client -p ${ORANGEFS_PATH}/sbin/pvfs2-client-core
-# sudo mount -t pvfs2 tcp://$server:3334/pfs ${mount_dir}
-# mount | grep pvfs2
-# EOF
-# done
+#Server Setup
+for node in ${server_list}
+do
+  ssh $node /bin/bash << EOF
+    echo "Setting up server at ${node}"
+    rm -rf ${server_dir}*
+    mkdir -p ${server_dir}
+    pvfs2-server -f -a ${node} ${CWD}/pfs.conf
+    pvfs2-server -a ${node} ${CWD}/conf/pfs.conf
+  EOF
+done
 
-# #Client Setup
-# #!/bin/bash
-# SCRIPT_DIR=`pwd`
-# NODES=$(cat ${SCRIPT_DIR}/conf/server_lists/clients)
-# PFS_SERVERS=($(cat ${SCRIPT_DIR}/conf/server_lists/pfs))
-# server=${PFS_SERVERS[0]}
-# for node in $NODES
-# do
-# if [[ $node == *"comp"* ]]; then
-#   mount_dir=/mnt/nvme/jcernudagarcia/write/pfs/
-# else
-#   mount_dir=/mnt/ssd/jcernudagarcia/write/pfs/
-# fi
-# echo "Starting pfs client on $node"
-# ssh $node /bin/bash << EOF
-# sudo kill-pvfs2-client
-# mkdir -p ${mount_dir} 
-# sudo insmod ${ORANGEFS_KO}/pvfs2.ko
-# sudo ${ORANGEFS_PATH}/sbin/pvfs2-client -p ${ORANGEFS_PATH}/sbin/pvfs2-client-core
-# sudo mount -t pvfs2 tcp://$server:3334/pfs ${mount_dir}
-# mount | grep pvfs2
-# EOF
-# done
+
+#Client Setup
+for node in ${client_list}
+do
+  ssh $node /bin/bash << EOF
+    echo "Starting client on ${node}"
+    sudo kill-pvfs2-client
+    mkdir -p ${client_dir} 
+    sudo insmod ${ORANGEFS_KO}/pvfs2.ko
+    sudo ${ORANGEFS_PATH}/sbin/pvfs2-client -p ${ORANGEFS_PATH}/sbin/pvfs2-client-core
+    sudo mount -t pvfs2 tcp://${server_list[0]}:${comm_port}/${name} ${client_dir}
+  EOF
+done
 
 # #IOR
 # OUT_DIR=$1
