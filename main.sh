@@ -1,9 +1,34 @@
 #!/bin/bash
 
+#Remeber to have env Variables for:
+# ORANGEFS_KO
+# ORANGEFS_PATH
+#Usage
+# ./setupPfs\
+#   fd 
+#
+
 #Input Variables
+node_file="./all_nodes"
+partition="stor"
+num_servers=2
+server_dir=/mnt/ssd/jcernudagarcia/orangefs
+
+#General Variables
+CWD=$(pwd)
+server_list=($(grep -E "*${partition}*" ${node_file} | head -n ${num_servers}))
+server_comma=$( IFS=$','; echo "${server_list[*]}" )
 
 # #Config PFS
-# echo ${PVFS2_GENCONFIG} --quiet --protocol tcp --tcpport ${comm_port} --dist-name ${dist_name} --dist-params ${dist_params} --ioservers ${servers} --metaservers ${servers} --storage ${SERVER_LOCAL_STOR_DIR} --metadata ${SERVER_LOCAL_STOR_DIR} --logfile ${SERVER_LOG_FILE} ${CWD}/pvfs2-${number}N.conf
+name="orangefs" #TODO: Allow renaming
+comm_port=3334  #TODO: Allow changing
+dist_name="simple_stripe"
+dist_params="strip_size:65536" #TODO: Allow changing
+data_dir=${server_dir}/data/
+meta_dir=${server_dir}/meta/
+log_dir=${server_dir}/log
+
+echo pvfs2-genconfig --quiet --protocol tcp --tcpport ${comm_port} --dist-name ${dist_name} --dist-params ${dist_params} --ioservers ${server_comma} --metaservers ${server_comma} --storage ${data_dir} --metadata ${meta_dir} --logfile ${log_dir} ${CWD}/pfs.conf
 
 # #Server Setup
 # #!/bin/bash
