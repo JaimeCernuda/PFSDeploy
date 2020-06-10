@@ -3,27 +3,34 @@
 #Remeber to have env Variables for:
 # ORANGEFS_KO
 # ORANGEFS_PATH
+#We also need
+# /conf/all_nodes
+# /conf/hostfile for mpi
 #Usage
 # ./setup\
-#   fd 
-#
+#   stor 2 /mnt/ssd/jcernudagarcia/orangefs\
+#   comp 2 /mnt/nvme/jcernudagarcia/write/pfs/\
+#   5 1 16M 4
 
 #Input Variables
-node_file="./all_nodes"
-server_partition="stor"
-num_servers=2
-server_dir=/mnt/ssd/jcernudagarcia/orangefs
-client_partition="comp"
-num_clients=2
-client_dir=/mnt/nvme/jcernudagarcia/write/pfs/
+server_partition=$1
+num_servers=$2
+server_dir=$3
+client_partition=$4
+num_clients=$5
+client_dir=$6
+num_ior_iter=$7
+mpi_factor=$8
+ior_size=$9
+ior_rep=$10
 
 #General Variables
 CWD=$(pwd)
 
-server_list=($(grep -E "*${server_partition}*" ${node_file} | head -n ${num_servers}))
+server_list=($(grep -E "*${server_partition}*" ${CWD}/conf/all_nodes | head -n ${num_servers}))
 server_comma=$( IFS=$','; echo "${server_list[*]}" )
 
-client_list=($(grep -E "*${client_partition}*" ${node_file} | head -n ${num_clients}))
+client_list=($(grep -E "*${client_partition}*" ${CWD}/conf/all_nodes | head -n ${num_clients}))
 
 # #Config PFS
 name="orangefs" #TODO: Allow renaming
@@ -63,13 +70,17 @@ do
   EOF
 done
 
-# #IOR
-# OUT_DIR=$1
-# IDENTIFIER=$2
-# $i=
-# echo -e "${GREEN}Running ${IDENTIFIER} on ${i} nodes ${NC}"
-# echo "mpirun --hostfile computeNodes -np $(( 40*$i )) ior -a MPIIO -b 16m -s 4 -t 16m -e -E -k -w -i 3 -o ${OUT_DIR} > log-${IDENTIFIER}-${i}.log"
-# mpirun --hostfile computeNodes -np $(( 40*$i )) ior -a MPIIO -b 16m -s 4 -t 16m -e -E -k -w -i 3 -o ${OUT_DIR} > log-${IDENTIFIER}-${i}.log
-# echo -n "${IDENTIFIER}-${i}, " >> results
-# grep -E "write" log-${IDENTIFIER}-${i}.log | tail -n 1 | awk '{ print $4 }' >> results
-# mv log-${IDENTIFIER}-${i}.log ./logs/
+#IOR
+identifier="S-${server_partition}-${server_number}-C-${client_partition}-${client_number}"
+factor=$((${num_ior_iter}-1))
+mkdir -p ${CWD}/logs/
+touch ${client_dir}/test
+
+echo -e "Running IOR"
+mpirun --hostfile ${CWD}/conf/hostfile -np $(( ${mpi_factor}*$num_clients )) ior -a MPIIO -b ${ior_size} -s ${ior_rep} -t ${ior_size} -e -E -k -w -i ${num_ior_iter} -o ${client_dir}/test > log-${identifier}.log
+rm ${client_dir}/test
+
+echo -n "${identifier}, " >> ${CWD}/results
+grep -E "write" log-${identifier}.log | tail -n ${num_ior_iter} | head -n ${factor} | awk -v f=${factor} ' { s+=$2;r=s/f }END{ print r }' >> ${CWD}/results
+
+mv log-${identifier}.log ${CWD}/logs/
